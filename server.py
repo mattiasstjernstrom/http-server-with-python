@@ -1,5 +1,7 @@
+import os
 import socket
 from threading import Thread
+from cam import run_cam
 
 
 def get_local_ip():
@@ -11,12 +13,31 @@ def get_local_ip():
 
 def handle_request(client_connection):
     """Handles the HTTP request."""
-    request = client_connection.recv(1024).decode()
-    print(request)
 
-    filename = request.split()[1]
-    if filename == "/":
+    request = client_connection.recv(1024).decode()
+    if not request:
+        return
+
+    request_lines = request.split()
+    if len(request_lines) < 2:
+        response = "HTTP/1.0 400 BAD REQUEST\n\nInvalid HTTP request"
+        client_connection.sendall(response.encode())
+        client_connection.close()
+        return
+
+    path = request.split()[1]
+    filename = path
+
+    if path == "/":
         filename = "/index.html"
+    elif path == "/run":
+
+        # run cam.py
+        run_cam()
+        response = "HTTP/1.0 200 OK\n\n" + f"Logged user info and ran script"
+        client_connection.sendall(response.encode())
+        client_connection.close()
+        return
 
     try:
         with open("htdocs" + filename) as fin:
