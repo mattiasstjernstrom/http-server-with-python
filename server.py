@@ -1,8 +1,19 @@
 import socket
+from threading import Thread
 
 
-def handle_request(request):
+def get_local_ip():
+    """Gets the local IP address of the machine."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+
+
+def handle_request(client_connection):
     """Handles the HTTP request."""
+    request = client_connection.recv(1024).decode()
+    print(request)
+
     filename = request.split()[1]
     if filename == "/":
         filename = "/index.html"
@@ -10,26 +21,34 @@ def handle_request(request):
     try:
         with open("htdocs" + filename) as fin:
             content = fin.read()
-        return "HTTP/1.0 200 OK\n\n" + content
+        response = "HTTP/1.0 200 OK\n\n" + content
     except FileNotFoundError:
-        return "HTTP/1.0 404 NOT FOUND\n\nFile Not Found"
+        response = "HTTP/1.0 404 NOT FOUND\n\nFile Not Found"
+
+    client_connection.sendall(response.encode())
+    client_connection.close()
 
 
-# Define socket host and port
-SERVER_HOST = "0.0.0.0"
-SERVER_PORT = 8080
+def start_server(host, port):
+    """Starts the server."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((host, port))
+        server_socket.listen(5)
+        print(f"{host}:{port}, ")
 
-# Create and configure socket
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((SERVER_HOST, SERVER_PORT))
-    server_socket.listen(1)
-    print(f"Listening on port {SERVER_PORT} ...")
+        while True:
+            client_connection, client_address = server_socket.accept()
+            print(f"Accepted connection from {client_address}")
+            handle_request(client_connection)
 
-    while True:
-        client_connection, client_address = server_socket.accept()
-        with client_connection:
-            request = client_connection.recv(1024).decode()
-            print(request)
-            response = handle_request(request)
-            client_connection.sendall(response.encode())
+
+if __name__ == "__main__":
+    local_ip = get_local_ip()
+    SERVER_PORT = 8080
+
+    print(f"Starting server at: ")
+
+    Thread(target=start_server, args=("127.0.0.1", SERVER_PORT)).start()
+    Thread(target=start_server, args=(local_ip, SERVER_PORT)).start()
+    print()
